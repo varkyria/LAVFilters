@@ -33,6 +33,8 @@
 #include "subtitles/LAVSubtitleConsumer.h"
 #include "subtitles/LAVVideoSubtitleInputPin.h"
 
+#include "CCOutputPin.h"
+
 #include "BaseTrayIcon.h"
 #include "IMediaSideData.h"
 
@@ -138,6 +140,8 @@ public:
   STDMETHODIMP SetHWAccelDeviceIndex(LAVHWAccel hwAccel, DWORD dwIndex, DWORD dwDeviceIdentifier);
 
   STDMETHODIMP SetH264MVCDecodingOverride(BOOL bEnabled);
+
+  STDMETHODIMP SetEnableCCOutputPin(BOOL bEnabled);
 
   // ILAVVideoSettingsMPCHCCustom
   STDMETHODIMP SetPropertyPageCallback(HRESULT (*fpPropPageCallback)(IBaseFilter* pFilter));
@@ -288,6 +292,8 @@ private:
   CLAVVideoSubtitleInputPin *m_pSubtitleInput  = nullptr;
   CLAVSubtitleConsumer *m_SubtitleConsumer     = nullptr;
 
+  CCCOutputPin         *m_pCCOutputPin         = nullptr;
+
   LAVFrame             *m_pLastSequenceFrame   = nullptr;
 
   AM_SimpleRateChange  m_DVDRate = AM_SimpleRateChange{AV_NOPTS_VALUE, 10000};
@@ -318,6 +324,7 @@ private:
     DWORD HWAccelDeviceD3D11;
     DWORD HWAccelDeviceD3D11Desc;
     BOOL bH264MVCOverride;
+    BOOL bCCOutputPinEnabled;
   } m_settings;
 
   DWORD m_dwGPUDeviceIndex = DWORD_MAX;

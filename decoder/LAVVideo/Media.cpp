@@ -84,6 +84,9 @@ static const FFMPEG_SUBTYPE_MAP lavc_video_codecs[] = {
   { &MEDIASUBTYPE_VP80, AV_CODEC_ID_VP8 },
   { &MEDIASUBTYPE_VP90, AV_CODEC_ID_VP9 },
 
+  // AV1
+  { &MEDIASUBTYPE_AV01, AV_CODEC_ID_AV1 },
+
   // MPEG4 ASP
   { &MEDIASUBTYPE_XVID, AV_CODEC_ID_MPEG4 },
   { &MEDIASUBTYPE_xvid, AV_CODEC_ID_MPEG4 },
@@ -346,6 +349,9 @@ const AMOVIESETUP_MEDIATYPE CLAVVideo::sudPinTypesIn[] = {
   { &MEDIATYPE_Video, &MEDIASUBTYPE_VP70 },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_VP80 },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_VP90 },
+
+  // AV1
+  { &MEDIATYPE_Video, &MEDIASUBTYPE_AV01 },
 
   // MPEG4 ASP
   { &MEDIATYPE_Video, &MEDIASUBTYPE_XVID },
@@ -615,7 +621,7 @@ static codec_config_t m_codec_config[] = {
   { 1, { AV_CODEC_ID_RPZA }},                                                // Codec_QTRpza
   { 1, { AV_CODEC_ID_PNG }},                                                 // Codec_PNG
   { 2, { AV_CODEC_ID_MSRLE, AV_CODEC_ID_AASC }},                                // Codec_MSRLE
-  { 1, { AV_CODEC_ID_PRORES }, "prores", "ProRes" },                         // Codec_ProRes
+  { 1, { AV_CODEC_ID_PRORES }},                                              // Codec_ProRes
   { 1, { AV_CODEC_ID_UTVIDEO }},                                             // Codec_UtVideo
   { 1, { AV_CODEC_ID_DIRAC }},                                               // Codec_Dirac
   { 1, { AV_CODEC_ID_DNXHD }},                                               // Codec_DNxHD
@@ -638,22 +644,23 @@ static codec_config_t m_codec_config[] = {
   { 2, { AV_CODEC_ID_TRUEMOTION1, AV_CODEC_ID_TRUEMOTION2 }, "truemotion", "Duck TrueMotion 1/2"}, // Codec_TrueMotion
   { 1, { AV_CODEC_ID_VP7 }},                                                 // Codec_VP7
   { 1, { AV_CODEC_ID_H264_MVC }, "h264mvc", "H.264 MVC 3D" },                // Codec_H264MVC
-  { 1, { AV_CODEC_ID_CFHD }, "cfhd", "Cineform HD (experimental)" },         // Codec_CineformHD
+  { 1, { AV_CODEC_ID_CFHD }},                                                // Codec_CineformHD
   { 1, { AV_CODEC_ID_MAGICYUV }},                                            // Codec_MagicYUV
+  { 1, { AV_CODEC_ID_AV1 }},                                                 // Codec_AV1
 };
 
 const codec_config_t *get_codec_config(LAVVideoCodec codec)
 {
   codec_config_t *config = &m_codec_config[codec];
 
-  AVCodec *avcodec = avcodec_find_decoder(config->codecs[0]);
-  if (avcodec) {
+  const AVCodecDescriptor *desc = avcodec_descriptor_get(config->codecs[0]);
+  if (desc) {
     if (!config->name) {
-      config->name = avcodec->name;
+      config->name = desc->name;
     }
 
     if (!config->description) {
-      config->description = avcodec->long_name;
+      config->description = desc->long_name;
     }
   }
 

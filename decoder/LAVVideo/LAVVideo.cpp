@@ -91,6 +91,7 @@ CLAVVideo::~CLAVVideo()
   SafeRelease(&m_SubtitleConsumer);
 
   SAFE_DELETE(m_pSubtitleInput);
+  SAFE_DELETE(m_pCCOutputPin);
 
 #if defined(DEBUG) && defined(LAV_DEBUG_RELEASE)
   DbgCloseLogFile();
@@ -156,7 +157,6 @@ HRESULT CLAVVideo::LoadDefaults()
     m_settings.bHWFormats[i] = TRUE;
 
   m_settings.bHWFormats[HWCodec_MPEG4] = FALSE;
-  m_settings.bHWFormats[HWCodec_VP9] = FALSE;
 
   m_settings.HWAccelResFlags = LAVHWResFlag_SD|LAVHWResFlag_HD|LAVHWResFlag_UHD;
 
@@ -177,6 +177,7 @@ HRESULT CLAVVideo::LoadDefaults()
   m_settings.HWAccelDeviceD3D11Desc = 0;
 
   m_settings.bH264MVCOverride = TRUE;
+  m_settings.bCCOutputPinEnabled = FALSE;
 
   return S_OK;
 }
@@ -472,15 +473,26 @@ STDMETHODIMP_(LPWSTR) CLAVVideo::GetFileExtension()
 
 int CLAVVideo::GetPinCount()
 {
+  int nCount = 2;
+
   if (m_pSubtitleInput)
-    return 3;
-  return 2;
+    nCount++;
+
+  if (m_pCCOutputPin)
+    nCount++;
+
+  return nCount;
 }
 
 CBasePin* CLAVVideo::GetPin(int n)
 {
-  if (n == 2)
-    return m_pSubtitleInput;
+  if (n >= 2)
+  {
+    if (m_pSubtitleInput && n == 2)
+      return m_pSubtitleInput;
+    else if ((m_pSubtitleInput && n == 3) || (!m_pSubtitleInput && n == 2))
+      return m_pCCOutputPin;
+  }
   return __super::GetPin(n);
 }
 
@@ -740,6 +752,12 @@ HRESULT CLAVVideo::CreateDecoder(const CMediaType *pmt)
   if (pix == LAVPixFmt_YUV420 || pix == LAVPixFmt_YUV422 || pix == LAVPixFmt_NV12)
     m_filterPixFmt = pix;
 
+  if (m_settings.bCCOutputPinEnabled && !bDVDPlayback && (codec == AV_CODEC_ID_MPEG2VIDEO || codec == AV_CODEC_ID_H264))
+  {
+    if (m_pCCOutputPin == nullptr && CBaseFilter::IsStopped())
+      m_pCCOutputPin = new CCCOutputPin(TEXT("CCCOutputPin"), this, &m_csFilter, &hr, L"~CC Output");
+  }
+
 done:
   return SUCCEEDED(hr) ? S_OK : VFW_E_TYPE_NOT_ACCEPTED;
 }
@@ -789,6 +807,9 @@ HRESULT CLAVVideo::EndOfStream()
   m_Decoder.EndOfStream();
   Filter(GetFlushFrame());
 
+  if (m_pCCOutputPin)
+    m_pCCOutputPin->DeliverEndOfStream();
+
   DbgLog((LOG_TRACE, 1, L"EndOfStream finished, decoder flushed"));
   return __super::EndOfStream();
 }
@@ -821,6 +842,10 @@ HRESULT CLAVVideo::BeginFlush()
 {
   DbgLog((LOG_TRACE, 1, L"::BeginFlush"));
   m_bFlushing = TRUE;
+
+  if (m_pCCOutputPin)
+    m_pCCOutputPin->DeliverBeginFlush();
+
   return __super::BeginFlush();
 }
 
@@ -836,7 +861,11 @@ HRESULT CLAVVideo::EndFlush()
   }
 
   HRESULT hr = __super::EndFlush();
+
+  if (m_pCCOutputPin)
+    m_pCCOutputPin->DeliverEndFlush();
   m_bFlushing = FALSE;
+
   return hr;
 }
 
@@ -881,6 +910,9 @@ HRESULT CLAVVideo::NewSegment(REFERENCE_TIME tStart, REFERENCE_TIME tStop, doubl
   DbgLog((LOG_TRACE, 1, L"::NewSegment - %I64d / %I64d", tStart, tStop));
 
   PerformFlush();
+
+  if (m_pCCOutputPin)
+    m_pCCOutputPin->DeliverNewSegment(tStart, tStop, dRate);
 
   return __super::NewSegment(tStart, tStop, dRate);
 }
@@ -1845,9 +1877,20 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
     IMediaSideData *pMediaSideData = nullptr;
     if (SUCCEEDED(hr = pSampleOut->QueryInterface(&pMediaSideData))) {
       for (int i = 0; i < pFrame->side_data_count; i++)
-        pMediaSideData->SetSideData(pFrame->side_data[i].guidType, pFrame->side_data[i].data, pFrame->side_data[i].size);
+      {
+        if (pFrame->side_data[i].guidType != IID_MediaSideDataEIA608CC)
+          pMediaSideData->SetSideData(pFrame->side_data[i].guidType, pFrame->side_data[i].data, pFrame->side_data[i].size);
+      }
 
       SafeRelease(&pMediaSideData);
+    }
+
+    if (m_pCCOutputPin && m_pCCOutputPin->IsConnected()) {
+      size_t sCC = 0;
+      BYTE *CC = GetLAVFrameSideData(pFrame, IID_MediaSideDataEIA608CC, &sCC);
+      if (CC && sCC) {
+        m_pCCOutputPin->DeliverCCData(CC, sCC, pFrame->rtStart);
+      }
     }
   }
 
@@ -2527,6 +2570,12 @@ STDMETHODIMP CLAVVideo::SetHWAccelDeviceIndex(LAVHWAccel hwAccel, DWORD dwIndex,
 STDMETHODIMP CLAVVideo::SetH264MVCDecodingOverride(BOOL bEnabled)
 {
   m_settings.bH264MVCOverride = bEnabled;
+  return S_OK;
+}
+
+STDMETHODIMP CLAVVideo::SetEnableCCOutputPin(BOOL bEnabled)
+{
+  m_settings.bCCOutputPinEnabled = bEnabled;
   return S_OK;
 }
 
