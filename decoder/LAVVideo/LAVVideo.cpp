@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2010-2018 Hendrik Leppkes
+ *      Copyright (C) 2010-2019 Hendrik Leppkes
  *      http://www.1f0.de
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -157,6 +157,7 @@ HRESULT CLAVVideo::LoadDefaults()
     m_settings.bHWFormats[i] = TRUE;
 
   m_settings.bHWFormats[HWCodec_MPEG4] = FALSE;
+  m_settings.bHWFormats[HWCodec_H264MVC] = FALSE;
 
   m_settings.HWAccelResFlags = LAVHWResFlag_SD|LAVHWResFlag_HD|LAVHWResFlag_UHD;
 
@@ -294,6 +295,9 @@ HRESULT CLAVVideo::ReadSettings(HKEY rootKey)
     bFlag = regHW.ReadBOOL(L"vp9", hr);
     if (SUCCEEDED(hr)) m_settings.bHWFormats[HWCodec_VP9] = bFlag;
 
+    bFlag = regHW.ReadBOOL(L"h264mvc", hr);
+    if (SUCCEEDED(hr)) m_settings.bHWFormats[HWCodec_H264MVC] = bFlag;
+
     dwVal = regHW.ReadDWORD(L"HWResFlags", hr);
     if (SUCCEEDED(hr)) m_settings.HWAccelResFlags = dwVal;
 
@@ -365,6 +369,7 @@ HRESULT CLAVVideo::SaveSettings()
     regHW.WriteBOOL(L"dvd",m_settings.bHWFormats[HWCodec_MPEG2DVD]);
     regHW.WriteBOOL(L"hevc",m_settings.bHWFormats[HWCodec_HEVC]);
     regHW.WriteBOOL(L"vp9", m_settings.bHWFormats[HWCodec_VP9]);
+    regHW.WriteBOOL(L"h264mvc", m_settings.bHWFormats[HWCodec_H264MVC]);
 
     regHW.WriteDWORD(L"HWResFlags", m_settings.HWAccelResFlags);
 
@@ -1206,9 +1211,11 @@ HRESULT CLAVVideo::ReconnectOutput(int width, int height, AVRational ar, DXVA2_E
     dxvaExtFlags.VideoTransferMatrix = DXVA2_VideoTransferMatrix_Unknown;
   }
 
-  // madVR uses a different value for SMPTE ST 2084
-  if (dxvaExtFlags.VideoTransferFunction == 15 && m_bMadVR) {
-    dxvaExtFlags.VideoTransferFunction = 16;
+  // madVR doesn't understand HLG yet, fallback to BT.709, which makes use of the backwards-compatible nature of HLG
+  // Value 16 was used for ST2084 by madVR, which results in a terrible experience with HLG videos otherwise
+  // TODO: remove once madVR learns HLG
+  if (dxvaExtFlags.VideoTransferFunction == 16 && m_bMadVR) {
+    dxvaExtFlags.VideoTransferFunction = DXVA2_VideoTransFunc_709;
   }
 
   if (mt.formattype  == FORMAT_VideoInfo) {

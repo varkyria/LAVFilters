@@ -1,5 +1,5 @@
 /*
-*      Copyright (C) 2010-2018 Hendrik Leppkes
+*      Copyright (C) 2010-2019 Hendrik Leppkes
 *      http://www.1f0.de
 *
 *  This program is free software; you can redistribute it and/or modify
@@ -23,8 +23,6 @@
 
 #include "mfxvideo.h"
 #include "mfxmvc.h"
-
-#include "parsers/AnnexBConverter.h"
 
 #include <deque>
 #include <vector>
@@ -61,7 +59,7 @@ public:
   STDMETHODIMP EndOfStream();
   STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp) { if (pPix) *pPix = LAVPixFmt_NV12; if (pBpp) *pBpp = 8; return S_OK; }
   STDMETHODIMP_(BOOL) IsInterlaced(BOOL bAllowGuess) { return FALSE; }
-  STDMETHODIMP_(const WCHAR*) GetDecoderName() { return L"msdk mvc"; }
+  STDMETHODIMP_(const WCHAR*) GetDecoderName() { return (m_mfxImpl != MFX_IMPL_SOFTWARE) ? L"msdk mvc hw" : L"msdk mvc"; }
   STDMETHODIMP HasThreadSafeBuffers() { return S_OK; }
 
   // CDecBase
@@ -93,6 +91,7 @@ private:
 
   mfxSession m_mfxSession = nullptr;
   mfxVersion m_mfxVersion = { 0 };
+  mfxIMPL    m_mfxImpl = 0;
 
   BOOL                 m_bDecodeReady   = FALSE;
   mfxVideoParam        m_mfxVideoParams = { 0 };
@@ -104,7 +103,7 @@ private:
   std::vector<MVCBuffer *> m_BufferQueue;
 
   GrowableArray<BYTE>  m_buff;
-  CAnnexBConverter    *m_pAnnexBConverter = nullptr;
+  int                  m_nMP4NALUSize = 0;
 
   MVCBuffer           *m_pOutputQueue[ASYNC_QUEUE_SIZE] = { 0 };
   int                  m_nOutputQueuePosition = 0;

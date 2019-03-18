@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2010-2018 Hendrik Leppkes
+ *      Copyright (C) 2010-2019 Hendrik Leppkes
  *      http://www.1f0.de
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -105,6 +105,8 @@ public:
   STDMETHODIMP SetBitstreamConfig(LAVBitstreamCodec bsCodec, BOOL bEnabled);
   STDMETHODIMP_(BOOL) GetDTSHDFraming();
   STDMETHODIMP SetDTSHDFraming(BOOL bHDFraming);
+  STDMETHODIMP_(BOOL) GetBitstreamingFallback();
+  STDMETHODIMP SetBitstreamingFallback(BOOL bBitstreamingFallback);
   STDMETHODIMP_(BOOL) GetAutoAVSync();
   STDMETHODIMP SetAutoAVSync(BOOL bAutoSync);
   STDMETHODIMP_(BOOL) GetOutputStandardLayout();
@@ -299,6 +301,7 @@ private:
     BOOL bFormats[Codec_AudioNB];
     BOOL bBitstream[Bitstream_NB];
     BOOL DTSHDFraming;
+    BOOL bBitstreamingFallback;
     BOOL AutoAVSync;
     BOOL ExpandMono;
     BOOL Expand61;
@@ -365,6 +368,7 @@ private:
 
   // TrueHD Bitstreaming
   struct {
+    bool init = false;
     int ratebits = 0;
 
     uint16_t prev_frametime = 0;

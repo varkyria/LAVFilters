@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2010-2018 Hendrik Leppkes
+ *      Copyright (C) 2010-2019 Hendrik Leppkes
  *      http://www.1f0.de
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -239,11 +239,19 @@ static const FFMPEG_SUBTYPE_MAP lavc_video_codecs[] = {
   { &MEDIASUBTYPE_ULRG, AV_CODEC_ID_UTVIDEO },
   { &MEDIASUBTYPE_ULY0, AV_CODEC_ID_UTVIDEO },
   { &MEDIASUBTYPE_ULY2, AV_CODEC_ID_UTVIDEO },
+  { &MEDIASUBTYPE_ULY4, AV_CODEC_ID_UTVIDEO },
   { &MEDIASUBTYPE_UQY2, AV_CODEC_ID_UTVIDEO },
   { &MEDIASUBTYPE_UQRG, AV_CODEC_ID_UTVIDEO },
   { &MEDIASUBTYPE_UQRA, AV_CODEC_ID_UTVIDEO },
   { &MEDIASUBTYPE_ULH0, AV_CODEC_ID_UTVIDEO },
   { &MEDIASUBTYPE_ULH2, AV_CODEC_ID_UTVIDEO },
+  { &MEDIASUBTYPE_ULH4, AV_CODEC_ID_UTVIDEO },
+  { &MEDIASUBTYPE_UMY2, AV_CODEC_ID_UTVIDEO },
+  { &MEDIASUBTYPE_UMH2, AV_CODEC_ID_UTVIDEO },
+  { &MEDIASUBTYPE_UMY4, AV_CODEC_ID_UTVIDEO },
+  { &MEDIASUBTYPE_UMH4, AV_CODEC_ID_UTVIDEO },
+  { &MEDIASUBTYPE_UMRG, AV_CODEC_ID_UTVIDEO },
+  { &MEDIASUBTYPE_UMRA, AV_CODEC_ID_UTVIDEO },
   { &MEDIASUBTYPE_AMVV, AV_CODEC_ID_AMV     },
   { &MEDIASUBTYPE_AMVF, AV_CODEC_ID_AMV     },
   { &MEDIASUBTYPE_DiracVideo, AV_CODEC_ID_DIRAC },
@@ -505,11 +513,19 @@ const AMOVIESETUP_MEDIATYPE CLAVVideo::sudPinTypesIn[] = {
   { &MEDIATYPE_Video, &MEDIASUBTYPE_ULRG },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_ULY0 },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_ULY2 },
+  { &MEDIATYPE_Video, &MEDIASUBTYPE_ULY4 },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_UQY2 },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_UQRG },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_UQRA },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_ULH0 },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_ULH2 },
+  { &MEDIATYPE_Video, &MEDIASUBTYPE_ULH4 },
+  { &MEDIATYPE_Video, &MEDIASUBTYPE_UMY2 },
+  { &MEDIATYPE_Video, &MEDIASUBTYPE_UMH2 },
+  { &MEDIATYPE_Video, &MEDIASUBTYPE_UMY4 },
+  { &MEDIATYPE_Video, &MEDIASUBTYPE_UMH4 },
+  { &MEDIATYPE_Video, &MEDIASUBTYPE_UMRG },
+  { &MEDIATYPE_Video, &MEDIASUBTYPE_UMRA },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_AMVV },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_AMVF },
   { &MEDIATYPE_Video, &MEDIASUBTYPE_DiracVideo },
@@ -776,6 +792,9 @@ void fillDXVAExtFormat(DXVA2_ExtendedFormat &fmt, int range, int primaries, int 
   case AVCOL_TRC_SMPTEST2084:
     fmt.VideoTransferFunction = 15;
     break;
+  case AVCOL_TRC_ARIB_STD_B67: // HLG
+    fmt.VideoTransferFunction = 16;
+    break;
   }
 
   // Chroma location
@@ -814,6 +833,80 @@ void processFFHDRData(MediaSideDataHDR *sd, AVMasteringDisplayMetadata *ff)
     sd->max_display_mastering_luminance = av_q2d(ff->max_luminance);
     sd->min_display_mastering_luminance = av_q2d(ff->min_luminance);
   }
+}
+
+void processFFHDR10PlusData(MediaSideDataHDR10Plus *sd, AVDynamicHDRPlus *ff, int width, int height)
+{
+  if (!sd || !ff)
+    return;
+
+  if (ff->num_windows > 3)
+    return;
+
+  sd->num_windows = ff->num_windows;
+  for (int i = 0; i < ff->num_windows; i++)
+  {
+    sd->windows[i].upper_left_corner_x = (int)av_q2d(ff->params[i].window_upper_left_corner_x) * (width - 1);
+    sd->windows[i].upper_left_corner_y = (int)av_q2d(ff->params[i].window_upper_left_corner_y) * (height - 1);
+
+    sd->windows[i].lower_right_corner_x = (int)av_q2d(ff->params[i].window_lower_right_corner_x) * (width - 1);
+    sd->windows[i].lower_right_corner_y = (int)av_q2d(ff->params[i].window_lower_right_corner_y) * (height - 1);
+
+    sd->windows[i].center_of_ellipse_x = ff->params[i].center_of_ellipse_x;
+    sd->windows[i].center_of_ellipse_y = ff->params[i].center_of_ellipse_y;
+
+    sd->windows[i].rotation_angle = ff->params[i].rotation_angle;
+    sd->windows[i].semimajor_axis_internal_ellipse = ff->params[i].semimajor_axis_internal_ellipse;
+    sd->windows[i].semimajor_axis_external_ellipse = ff->params[i].semimajor_axis_external_ellipse;
+    sd->windows[i].semiminor_axis_external_ellipse = ff->params[i].semiminor_axis_external_ellipse;
+
+    sd->windows[i].overlap_process_option = ff->params[i].overlap_process_option;
+
+    for (int k = 0; k < 3; k++)
+      sd->windows[i].maxscl[k] = av_q2d(ff->params[i].maxscl[k]);
+
+    sd->windows[i].average_maxrgb = av_q2d(ff->params[i].average_maxrgb);
+
+    sd->windows[i].num_distribution_maxrgb_percentiles = ff->params[i].num_distribution_maxrgb_percentiles;
+    for (int k = 0; k < ff->params[i].num_distribution_maxrgb_percentiles; k++)
+    {
+      sd->windows[i].distribution_maxrgb_percentiles[k].percentage = ff->params[i].distribution_maxrgb[k].percentage;
+      sd->windows[i].distribution_maxrgb_percentiles[k].percentile = av_q2d(ff->params[i].distribution_maxrgb[k].percentile);
+    }
+
+    sd->windows[i].fraction_bright_pixels = av_q2d(ff->params[i].fraction_bright_pixels);
+    sd->windows[i].tone_mapping_flag = ff->params[i].tone_mapping_flag;
+
+    if (sd->windows[i].tone_mapping_flag)
+    {
+      sd->windows[i].knee_point_x = av_q2d(ff->params[i].knee_point_x);
+      sd->windows[i].knee_point_y = av_q2d(ff->params[i].knee_point_y);
+
+      sd->windows[i].num_bezier_curve_anchors = ff->params[i].num_bezier_curve_anchors;
+      for (int k = 0; k < ff->params[i].num_bezier_curve_anchors; k++)
+        sd->windows[i].bezier_curve_anchors[k] = av_q2d(ff->params[i].bezier_curve_anchors[k]);
+    }
+
+    sd->windows[i].color_saturation_mapping_flag = ff->params[i].color_saturation_mapping_flag;
+    if (sd->windows[i].color_saturation_mapping_flag)
+      sd->windows[i].color_saturation_weight = av_q2d(ff->params[i].color_saturation_weight);
+  }
+
+  sd->targeted_system_display_maximum_luminance = av_q2d(ff->targeted_system_display_maximum_luminance);
+
+  sd->targeted_system_display_actual_peak_luminance_flag = ff->targeted_system_display_actual_peak_luminance_flag;
+  sd->num_rows_targeted_system_display_actual_peak_luminance = ff->num_rows_targeted_system_display_actual_peak_luminance;
+  sd->num_cols_targeted_system_display_actual_peak_luminance = ff->num_cols_targeted_system_display_actual_peak_luminance;
+  for (int i = 0; i < ff->num_rows_targeted_system_display_actual_peak_luminance; i++)
+    for (int j = 0; j < ff->num_cols_targeted_system_display_actual_peak_luminance; j++)
+      sd->targeted_system_display_actual_peak_luminance[i][j] = av_q2d(ff->targeted_system_display_actual_peak_luminance[i][j]);
+
+  sd->mastering_display_actual_peak_luminance_flag = ff->mastering_display_actual_peak_luminance_flag;
+  sd->num_rows_mastering_display_actual_peak_luminance = ff->num_rows_mastering_display_actual_peak_luminance;
+  sd->num_cols_mastering_display_actual_peak_luminance = ff->num_cols_mastering_display_actual_peak_luminance;
+  for (int i = 0; i < ff->num_rows_mastering_display_actual_peak_luminance; i++)
+    for (int j = 0; j < ff->num_cols_mastering_display_actual_peak_luminance; j++)
+      sd->mastering_display_actual_peak_luminance[i][j] = av_q2d(ff->mastering_display_actual_peak_luminance[i][j]);
 }
 
 extern "C" const uint8_t *avpriv_find_start_code(const uint8_t *p, const uint8_t *end, uint32_t *state);

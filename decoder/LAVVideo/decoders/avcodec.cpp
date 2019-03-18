@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2010-2018 Hendrik Leppkes
+ *      Copyright (C) 2010-2019 Hendrik Leppkes
  *      http://www.1f0.de
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -37,6 +37,7 @@
 extern "C" {
 #include "libavutil/pixdesc.h"
 #include "libavutil/mastering_display_metadata.h"
+#include "libavutil/hdr_dynamic_metadata.h"
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -363,6 +364,12 @@ STDMETHODIMP CDecAvcodec::InitDecoder(AVCodecID codec, const CMediaType *pmt)
     m_pAVCtx->thread_count = 1;
   }
 
+  // enable tile threading for dav1d decoding
+  if (codec == AV_CODEC_ID_AV1 && strcmp(m_pAVCodec->name, "libdav1d") == 0)
+  {
+    av_opt_set_int(m_pAVCtx->priv_data, "tilethreads", 2, 0);
+  }
+
   m_pFrame = av_frame_alloc();
   CheckPointer(m_pFrame, E_POINTER);
 
@@ -499,14 +506,8 @@ STDMETHODIMP CDecAvcodec::InitDecoder(AVCodecID codec, const CMediaType *pmt)
   }
 
   // Use ffmpegs logic to reorder timestamps
-  // This is required for H264 content (except AVI), and generally all codecs that use frame threading
-  m_bFFReordering        = !(dwDecFlags & LAV_VIDEO_DEC_FLAG_ONLY_DTS) && (
-                            (m_pAVCodec->capabilities & AV_CODEC_CAP_FRAME_THREADS) // Covers most modern codecs, others listed above
-                           || codec == AV_CODEC_ID_MPEG2VIDEO
-                           || codec == AV_CODEC_ID_MPEG1VIDEO
-                           || codec == AV_CODEC_ID_DIRAC
-                           || codec == AV_CODEC_ID_VC1
-                          );
+  // This is required for all codecs which use frame re-ordering or frame-threaded decoding (unless they specifically use DTS timestamps, ie. H264 in AVI)
+  m_bFFReordering        = !(dwDecFlags & LAV_VIDEO_DEC_FLAG_ONLY_DTS) && (m_pAVCodec->capabilities & AV_CODEC_CAP_DELAY);
 
   // Stop time is unreliable, drop it and calculate it
   m_bCalculateStopTime   = (codec == AV_CODEC_ID_H264 || codec == AV_CODEC_ID_DIRAC || (codec == AV_CODEC_ID_MPEG4 && pmt->formattype == FORMAT_MPEG2Video) || (codec == AV_CODEC_ID_VC1 && !(dwDecFlags & LAV_VIDEO_DEC_FLAG_ONLY_DTS)));
@@ -1097,6 +1098,18 @@ send_packet:
       }
       else {
         DbgLog((LOG_TRACE, 10, L"::Decode(): Found HDR Light Level data of an unexpected size (%d)", sdHDRContentLightLevel->size));
+      }
+    }
+
+    AVFrameSideData * sdHDR10Plus = av_frame_get_side_data(m_pFrame, AV_FRAME_DATA_DYNAMIC_HDR_PLUS);
+    if (sdHDR10Plus) {
+      if (sdHDR10Plus->size == sizeof(AVDynamicHDRPlus)) {
+        AVDynamicHDRPlus *metadata = (AVDynamicHDRPlus *)sdHDR10Plus->data;
+        MediaSideDataHDR10Plus * hdr = (MediaSideDataHDR10Plus *)AddLAVFrameSideData(pOutFrame, IID_MediaSideDataHDR10Plus, sizeof(MediaSideDataHDR10Plus));
+        processFFHDR10PlusData(hdr, metadata, m_pFrame->width, m_pFrame->height);
+      }
+      else {
+        DbgLog((LOG_TRACE, 10, L"::Decode(): Found HDR10+ data of an unexpected size (%d)", sdHDR10Plus->size));
       }
     }
 

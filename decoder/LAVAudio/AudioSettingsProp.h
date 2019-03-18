@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2010-2018 Hendrik Leppkes
+ *      Copyright (C) 2010-2019 Hendrik Leppkes
  *      http://www.1f0.de
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -71,6 +71,7 @@ private:
 
   bool m_bBitstreaming[Bitstream_NB];
   BOOL m_bDTSHDFraming;
+  BOOL m_bBitstreamingFallback;
   BOOL m_bAutoAVSync;
   BOOL m_bOutputStdLayout;
   BOOL m_bOutput51Legacy;

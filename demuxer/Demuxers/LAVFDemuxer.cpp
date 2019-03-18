@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2010-2018 Hendrik Leppkes
+ *      Copyright (C) 2010-2019 Hendrik Leppkes
  *      http://www.1f0.de
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -317,7 +317,6 @@ trynoformat:
   av_dict_set(&options, "icy", "1", 0); // request ICY metadata
   av_dict_set(&options, "advanced_editlist", "0", 0); // disable broken mov editlist handling
   av_dict_set(&options, "reconnect", "1", 0); // for http, reconnect if we get disconnected
-  av_dict_set(&options, "http_persistent", "0", 0);
 
   if (rtsp_transport != nullptr) {
     av_dict_set(&options, "rtsp_transport", rtsp_transport, 0);
@@ -686,13 +685,6 @@ STDMETHODIMP CLAVFDemuxer::InitAVFormat(LPCOLESTR pszFileName, BOOL bForce)
     UpdateSubStreams();
 
     if (st->codecpar->codec_type == AVMEDIA_TYPE_ATTACHMENT) {
-      if (st->codecpar->codec_id == AV_CODEC_ID_TTF || st->codecpar->codec_id == AV_CODEC_ID_OTF) {
-        if (!m_pFontInstaller) {
-          m_pFontInstaller = new CFontInstaller();
-        }
-        m_pFontInstaller->InstallFont(st->codecpar->extradata, st->codecpar->extradata_size);
-      }
-
       const AVDictionaryEntry* attachFilename = av_dict_get(st->metadata, "filename", nullptr, 0);
       const AVDictionaryEntry* attachMimeType = av_dict_get(st->metadata, "mimetype", nullptr, 0);
       const AVDictionaryEntry* attachDescription = av_dict_get(st->metadata, "comment", nullptr, 0);
@@ -713,6 +705,23 @@ STDMETHODIMP CLAVFDemuxer::InitAVFormat(LPCOLESTR pszFileName, BOOL bForce)
         SAFE_CO_FREE(chDescription);
       } else {
         DbgLog((LOG_TRACE, 10, L" -> Unknown attachment, missing filename or mimetype"));
+      }
+
+      // Try to guess the codec id for fonts only listed by name
+      if (st->codecpar->codec_id == AV_CODEC_ID_NONE && attachFilename)
+      {
+        char *dot = strrchr(attachFilename->value, '.');
+        if (dot && !strcmp(dot, ".ttf"))
+          st->codecpar->codec_id = AV_CODEC_ID_TTF;
+        else if (dot && !strcmp(dot, ".otf"))
+          st->codecpar->codec_id = AV_CODEC_ID_OTF;
+      }
+
+      if (st->codecpar->codec_id == AV_CODEC_ID_TTF || st->codecpar->codec_id == AV_CODEC_ID_OTF) {
+        if (!m_pFontInstaller) {
+          m_pFontInstaller = new CFontInstaller();
+        }
+        m_pFontInstaller->InstallFont(st->codecpar->extradata, st->codecpar->extradata_size);
       }
     } else if (st->disposition & AV_DISPOSITION_ATTACHED_PIC && st->attached_pic.data && st->attached_pic.size > 0) {
       LPWSTR chFilename = nullptr;
@@ -1685,7 +1694,16 @@ STDMETHODIMP CLAVFDemuxer::GetKeyFrames(const GUID* pFormat, REFERENCE_TIME* pKF
   AVStream *stream = m_avFormat->streams[m_dActiveStreams[video]];
   for(int i = 0; i < stream->nb_index_entries && nKFs < nKFsMax; i++) {
     if (stream->index_entries[i].flags & AVINDEX_KEYFRAME) {
-      pKFs[nKFs] = ConvertTimestampToRT(stream->index_entries[i].timestamp, stream->time_base.num, stream->time_base.den);
+      int64_t timestamp = stream->index_entries[i].timestamp;
+
+      // MP4 index timestamps are DTS, seeking expects PTS however, so offset them accordingly to ensure seeking works as expected
+      if (m_bMP4)
+      {
+        MOVStreamContext *sc = (MOVStreamContext *)stream->priv_data;
+        timestamp += (sc->min_corrected_pts + sc->dts_shift);
+      }
+
+      pKFs[nKFs] = ConvertTimestampToRT(timestamp, stream->time_base.num, stream->time_base.den);
       nKFs++;
     }
   }

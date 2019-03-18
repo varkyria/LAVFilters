@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2010-2018 Hendrik Leppkes
+ *      Copyright (C) 2010-2019 Hendrik Leppkes
  *      http://www.1f0.de
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -380,6 +380,11 @@ HRESULT CLAVAudio::Bitstream(const BYTE *pDataBuffer, int buffsize, int &consume
           m_bsOutput.SetSize(0);
         }
       }
+
+      /* if the bitstreaming context is lost at this point, then the deliver function caused a fallback to PCM */
+      if (m_avBSContext == nullptr)
+        return S_FALSE;
+
     }
   }
 
@@ -483,7 +488,7 @@ HRESULT CLAVAudio::DeliverBitstream(AVCodecID codec, const BYTE *buffer, DWORD d
       UpdateBitstreamContext();
       goto done;
     }
-    else if (hr == S_FALSE)
+    else if (hr == S_FALSE && m_settings.bBitstreamingFallback)
     {
       BitstreamFallbackToPCM();
       goto done;
@@ -513,6 +518,8 @@ HRESULT CLAVAudio::BitstreamFallbackToPCM()
       m_bBitstreamOverride[lavf_bitstream_config[i].config] = TRUE;
     }
   }
+
+  m_bQueueResync = TRUE;
 
   return S_OK;
 }

@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2010-2018 Hendrik Leppkes
+ *      Copyright (C) 2010-2019 Hendrik Leppkes
  *      http://www.1f0.de
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -197,6 +197,10 @@ interface __declspec(uuid("4158A22B-6553-45D0-8069-24716F8FF171")) ILAVAudioSett
   // Use 5.1 legacy layout (using back channels instead of side)
   STDMETHOD_(BOOL, GetOutput51LegacyLayout)() = 0;
   STDMETHOD(SetOutput51LegacyLayout)(BOOL b51Legacy) = 0;
+
+  // Fallback to audio decoding if bitstreaming is not supported by the audio renderer/hardware
+  STDMETHOD_(BOOL, GetBitstreamingFallback)() = 0;
+  STDMETHOD(SetBitstreamingFallback)(BOOL bBitstreamingFallback) = 0;
 };
 
 DECLARE_INTERFACE_IID_(ILAVAudioSettingsMPCHCCustom, IUnknown, "40A1D048-D41B-4D53-B737-FF9F99A245A0")
